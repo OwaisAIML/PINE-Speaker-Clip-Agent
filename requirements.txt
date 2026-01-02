@@ -1,0 +1,10 @@
+streamlit
+torch
+torchaudio
+pyannote.audio
+speechbrain
+ffmpeg-python
+numpy
+scipy
+huggingface_hub
+tqdm
