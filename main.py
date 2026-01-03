@@ -1,13 +1,3 @@
-from fastapi.middleware.cors import CORSMiddleware
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # allow all for now (safe for MVP)
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 import os
 import uuid
 import shutil
@@ -16,11 +6,12 @@ from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from pyannote.audio import Pipeline
 
 # -------------------------
-# App setup
+# App setup (MUST BE FIRST)
 # -------------------------
 app = FastAPI(
     title="PINE Speaker Clip Agent",
@@ -28,10 +19,23 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# -------------------------
+# CORS (AFTER app creation)
+# -------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # allow all for now (safe for MVP)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# -------------------------
+# Storage setup
+# -------------------------
 BASE_DIR = Path(__file__).resolve().parent
 STORAGE_DIR = BASE_DIR / "storage"
 STORAGE_DIR.mkdir(exist_ok=True)
-
 
 # -------------------------
 # Load pyannote pipeline safely
@@ -47,7 +51,6 @@ def get_diarization_pipeline():
         use_auth_token=hf_token
     )
 
-
 # -------------------------
 # Health check
 # -------------------------
@@ -57,7 +60,6 @@ def root():
         "status": "PINE FastAPI backend running",
         "engine": "pyannote.audio",
     }
-
 
 # -------------------------
 # Upload & diarize endpoint
