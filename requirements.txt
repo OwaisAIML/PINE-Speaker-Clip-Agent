@@ -1,21 +1,15 @@
-# ---------- Core numerical stack ----------
-numpy<2.0
-scipy
-tqdm
-
-# ---------- PyTorch (CPU only, compatible set) ----------
-torch==2.0.1
-torchaudio==2.0.2
-
-# ---------- Speaker diarization stack ----------
-pyannote.audio==3.1.1
-speechbrain==0.5.16
-huggingface_hub
-
-# ---------- Backend API ----------
 fastapi
 uvicorn
 python-multipart
 
-# ---------- Media utils ----------
+numpy<2.0
+
+torch==2.0.1
+torchaudio==2.0.2
+pyannote.audio==3.1.1
+speechbrain
+
 ffmpeg-python
+scipy
+huggingface_hub
+tqdm
