@@ -1,10 +1,16 @@
 streamlit
-torch
-torchaudio
-pyannote.audio
-speechbrain
-ffmpeg-python
+
+# Torch (CPU, compatible)
+torch==2.0.1
+torchaudio==2.0.2
+
+# Pyannote stack (compatible with torchaudio 2.0.x)
+pyannote.audio==3.1.1
+speechbrain==0.5.16
+
+# Utils
 numpy
 scipy
-huggingface_hub
 tqdm
+huggingface_hub
+ffmpeg-python
