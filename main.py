@@ -6,9 +6,8 @@ import tempfile
 from functools import lru_cache
 from pathlib import Path
 
-# ---- Runtime safety (CRITICAL for Render) ----
+# ---- Runtime safety for Render ----
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
-os.environ["PYANNOTE_DISABLE_CUDA"] = "1"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import torch
@@ -60,11 +59,11 @@ def get_diarization_pipeline():
         raise RuntimeError("HF_TOKEN environment variable not set")
 
     print("🔑 HF_TOKEN detected")
-    print("📦 Loading pyannote pipeline (CPU-safe mode)...")
+    print("📦 Loading pyannote pipeline (stable mode)...")
 
     pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization",
-        token=hf_token
+        use_auth_token=hf_token
     )
 
     print("✅ Pipeline loaded")
@@ -80,43 +79,6 @@ def root():
         "engine": "pyannote.audio",
         "device": "cpu"
     }
-
-# -------------------------
-# AUDIO diarization
-# -------------------------
-@app.post("/diarize")
-async def diarize_audio(file: UploadFile = File(...)):
-    if not file.filename.lower().endswith((".wav", ".mp3", ".m4a")):
-        raise HTTPException(status_code=400, detail="Unsupported audio format")
-
-    job_id = str(uuid.uuid4())
-    audio_path = STORAGE_DIR / f"{job_id}_{file.filename}"
-
-    with open(audio_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    try:
-        pipeline = get_diarization_pipeline()
-        diarization = pipeline(str(audio_path))
-    except Exception as e:
-        print("❌ AUDIO DIARIZATION ERROR:", repr(e))
-        return JSONResponse(
-            status_code=500,
-            content={"error": "audio_diarization_failed", "details": repr(e)}
-        )
-
-    speakers = {}
-    for segment, _, speaker in diarization.itertracks(yield_label=True):
-        speakers.setdefault(speaker, []).append({
-            "start": round(segment.start, 2),
-            "end": round(segment.end, 2)
-        })
-
-    return JSONResponse({
-        "job_id": job_id,
-        "num_speakers": len(speakers),
-        "speakers": speakers
-    })
 
 # -------------------------
 # VIDEO diarization
@@ -146,30 +108,15 @@ async def diarize_video(file: UploadFile = File(...)):
             str(audio_path)
         ]
 
-        try:
-            subprocess.run(
-                ffmpeg_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=True
-            )
-        except subprocess.CalledProcessError as e:
-            print("❌ FFMPEG ERROR:", e.stderr.decode())
-            return JSONResponse(
-                status_code=500,
-                content={"error": "ffmpeg_failed"}
-            )
+        subprocess.run(
+            ffmpeg_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True
+        )
 
-        try:
-            pipeline = get_diarization_pipeline()
-            diarization = pipeline(str(audio_path))
-            print("🧠 Diarization completed")
-        except Exception as e:
-            print("❌ VIDEO DIARIZATION ERROR:", repr(e))
-            return JSONResponse(
-                status_code=500,
-                content={"error": "video_diarization_failed", "details": repr(e)}
-            )
+        pipeline = get_diarization_pipeline()
+        diarization = pipeline(str(audio_path))
 
         speakers = {}
         for segment, _, speaker in diarization.itertracks(yield_label=True):

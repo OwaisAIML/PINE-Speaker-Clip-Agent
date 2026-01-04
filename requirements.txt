@@ -2,14 +2,16 @@ fastapi
 uvicorn
 python-multipart
 
-numpy<2.0
-
 torch==2.0.1
 torchaudio==2.0.2
+
 pyannote.audio==3.1.1
 speechbrain==0.5.16
 
-ffmpeg-python
+huggingface_hub<0.20
+numpy<2.0
 scipy
-huggingface_hub
 tqdm
+ffmpeg-python
+soundfile
+
