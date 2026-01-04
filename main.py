@@ -53,7 +53,7 @@ def get_diarization_pipeline():
 
     pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization",
-        use_auth_token=hf_token
+        token=hf_token
     )
 
     print("✅ Pipeline loaded")
