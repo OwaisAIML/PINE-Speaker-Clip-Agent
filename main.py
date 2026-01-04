@@ -26,7 +26,7 @@ app = FastAPI(
 # -------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # MVP-safe, lock later
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,10 +48,16 @@ def get_diarization_pipeline():
     if not hf_token:
         raise RuntimeError("HF_TOKEN environment variable not set")
 
-    return Pipeline.from_pretrained(
+    print("🔑 HF_TOKEN detected")
+    print("📦 Loading pyannote pipeline...")
+
+    pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization",
         use_auth_token=hf_token
     )
+
+    print("✅ Pipeline loaded")
+    return pipeline
 
 # -------------------------
 # Health check
@@ -81,6 +87,7 @@ async def diarize_audio(file: UploadFile = File(...)):
         pipeline = get_diarization_pipeline()
         diarization = pipeline(str(audio_path))
     except Exception as e:
+        print("❌ AUDIO DIARIZATION ERROR:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
     speakers = {}
@@ -97,7 +104,7 @@ async def diarize_audio(file: UploadFile = File(...)):
     })
 
 # -------------------------
-# VIDEO diarization (FIXES YOUR ERROR)
+# VIDEO diarization
 # -------------------------
 @app.post("/diarize-video")
 async def diarize_video(file: UploadFile = File(...)):
@@ -105,18 +112,20 @@ async def diarize_video(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Unsupported video format")
 
     job_id = str(uuid.uuid4())
+    print(f"🎬 VIDEO RECEIVED: {file.filename}")
 
-    # Use temp dir so nothing leaks
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        video_path = tmpdir / file.filename
-        audio_path = tmpdir / f"{job_id}.wav"
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        video_path = tmp / file.filename
+        audio_path = tmp / f"{job_id}.wav"
 
         # Save video
         with open(video_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Extract audio via ffmpeg
+        print("📁 Video saved:", video_path)
+
+        # Extract audio
         ffmpeg_cmd = [
             "ffmpeg",
             "-y",
@@ -129,17 +138,21 @@ async def diarize_video(file: UploadFile = File(...)):
         try:
             subprocess.run(
                 ffmpeg_cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 check=True
             )
-        except subprocess.CalledProcessError:
+            print("🎵 Audio extracted:", audio_path)
+        except subprocess.CalledProcessError as e:
+            print("❌ FFMPEG ERROR:", e.stderr.decode())
             raise HTTPException(status_code=500, detail="Audio extraction failed")
 
         try:
             pipeline = get_diarization_pipeline()
             diarization = pipeline(str(audio_path))
+            print("🧠 Diarization completed")
         except Exception as e:
+            print("❌ DIARIZATION ERROR:", e)
             raise HTTPException(status_code=500, detail=str(e))
 
         speakers = {}
