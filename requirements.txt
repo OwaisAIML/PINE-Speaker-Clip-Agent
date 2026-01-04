@@ -7,7 +7,7 @@ numpy<2.0
 torch==2.0.1
 torchaudio==2.0.2
 pyannote.audio==3.1.1
-speechbrain
+speechbrain==0.5.16
 
 ffmpeg-python
 scipy

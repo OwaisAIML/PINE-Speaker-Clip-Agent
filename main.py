@@ -6,6 +6,17 @@ import tempfile
 from functools import lru_cache
 from pathlib import Path
 
+# ---- Runtime safety (CRITICAL for Render) ----
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["PYANNOTE_DISABLE_CUDA"] = "1"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+import torch
+torch.set_num_threads(1)
+
+import torchaudio
+torchaudio.set_audio_backend("soundfile")
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,7 +44,7 @@ app.add_middleware(
 )
 
 # -------------------------
-# Storage (audio-only endpoint)
+# Storage
 # -------------------------
 BASE_DIR = Path(__file__).resolve().parent
 STORAGE_DIR = BASE_DIR / "storage"
@@ -49,7 +60,7 @@ def get_diarization_pipeline():
         raise RuntimeError("HF_TOKEN environment variable not set")
 
     print("🔑 HF_TOKEN detected")
-    print("📦 Loading pyannote pipeline...")
+    print("📦 Loading pyannote pipeline (CPU-safe mode)...")
 
     pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization",
@@ -67,6 +78,7 @@ def root():
     return {
         "status": "PINE FastAPI backend running",
         "engine": "pyannote.audio",
+        "device": "cpu"
     }
 
 # -------------------------
@@ -87,8 +99,11 @@ async def diarize_audio(file: UploadFile = File(...)):
         pipeline = get_diarization_pipeline()
         diarization = pipeline(str(audio_path))
     except Exception as e:
-        print("❌ AUDIO DIARIZATION ERROR:", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        print("❌ AUDIO DIARIZATION ERROR:", repr(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "audio_diarization_failed", "details": repr(e)}
+        )
 
     speakers = {}
     for segment, _, speaker in diarization.itertracks(yield_label=True):
@@ -119,13 +134,9 @@ async def diarize_video(file: UploadFile = File(...)):
         video_path = tmp / file.filename
         audio_path = tmp / f"{job_id}.wav"
 
-        # Save video
         with open(video_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        print("📁 Video saved:", video_path)
-
-        # Extract audio
         ffmpeg_cmd = [
             "ffmpeg",
             "-y",
@@ -142,18 +153,23 @@ async def diarize_video(file: UploadFile = File(...)):
                 stderr=subprocess.PIPE,
                 check=True
             )
-            print("🎵 Audio extracted:", audio_path)
         except subprocess.CalledProcessError as e:
             print("❌ FFMPEG ERROR:", e.stderr.decode())
-            raise HTTPException(status_code=500, detail="Audio extraction failed")
+            return JSONResponse(
+                status_code=500,
+                content={"error": "ffmpeg_failed"}
+            )
 
         try:
             pipeline = get_diarization_pipeline()
             diarization = pipeline(str(audio_path))
             print("🧠 Diarization completed")
         except Exception as e:
-            print("❌ DIARIZATION ERROR:", e)
-            raise HTTPException(status_code=500, detail=str(e))
+            print("❌ VIDEO DIARIZATION ERROR:", repr(e))
+            return JSONResponse(
+                status_code=500,
+                content={"error": "video_diarization_failed", "details": repr(e)}
+            )
 
         speakers = {}
         for segment, _, speaker in diarization.itertracks(yield_label=True):
